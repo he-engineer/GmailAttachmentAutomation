@@ -43,7 +43,7 @@ def get_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx']):
             
             print(f"Downloaded {file_name}")
             # Call the summarize function
-            data_stats_summary(file_path)
+            data_stats(file_path)
 
             # Call AWS Bedrock Claude 3 to summarize
             
@@ -51,7 +51,7 @@ def get_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx']):
             # Delete the file
             os.remove(file_path)
 
-def data_stats_summary(file_name):
+def data_stats(file_name):
     if file_name.endswith('.csv'):
         df = pd.read_csv(file_name)
     elif file_name.endswith('.xlsx'):
@@ -91,6 +91,6 @@ def data_stats_summary(file_name):
 # main logic 
 service = gmail_authenticate()
 messages_ids = list_messages(service, 'me')
-print("Email Message IDs that have attachment:", messages_ids)
+# print("Email Message IDs that have attachment:", messages_ids)
 for message_id in messages_ids:
     get_attachments(service, 'me', message_id["id"])
