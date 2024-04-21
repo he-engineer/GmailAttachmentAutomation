@@ -1,5 +1,6 @@
 import base64
 import json
+import boto3
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -27,7 +28,7 @@ def list_messages(service, user_id):
     return results.get('messages', [])
 
 
-def get_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx']):
+def process_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx']):
     message = service.users().messages().get(userId=user_id, id=message_id).execute()
     for part in message['payload']['parts']:
         file_name = part['filename']
@@ -43,49 +44,82 @@ def get_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx']):
             
             print(f"Downloaded {file_name}")
             # Call the summarize function
-            data_stats(file_path)
+            stats, data = data_stats(file_path)
+            # convert data to str using json
 
-            # Call AWS Bedrock Claude 3 to summarize
-            
+            # Call AWS Bedrock Claude to summarize
+            summarize_data(data)
 
             # Delete the file
             os.remove(file_path)
 
-def data_stats(file_name):
+
+"""
+Function to calculate statistics and retrieve data from a CSV or Excel file.
+
+Args:
+    file_name (str): The path to the CSV or Excel file. The file extension 
+        must be either '.csv' or '.xlsx'.
+
+Returns: 
+    stats (pandas DataFrame): The descriptive statistics of the DataFrame.
+    data (str): The DataFrame converted to a JSON string.
+"""
+def data_stats(file_name): 
     if file_name.endswith('.csv'):
         df = pd.read_csv(file_name)
     elif file_name.endswith('.xlsx'):
         df = pd.read_excel(file_name)
-    summary = df.describe()
-    print(summary)
+    stats = df.describe()
+    print(stats)
 
     # if df has more than 2 rows, print the first 2 rows
     if len(df) > 2:
         print("First 2 rows:")
         print(df.head(2))
 
-    return summary            
+    # convert df to json
+    data: str = json.dumps(df.to_dict())
+    return stats, data
 
 
 
-# def summarize_data(df):
-#     # Serialize DataFrame to JSON 
-#     data = json.dumps(df.to_dict())
+def summarize_data(data):
+    
+    # access_key = 'your-access-key-id'
+    # secret_key = 'your-secret-access-key'
 
-#     # Initialize Bedrock client
-#     client = BedrockRuntimeClient(region_name="region-name")
+    # session = boto3.Session(
+    #    aws_access_key_id=access_key,
+    #    aws_secret_access_key=secret_key,
+    #    region_name='us-east-1'
+    # )
+    # bedrock_client = session.client('bedrock-runtime')
 
-#     # Invoke Claude model
-#     response = client.send(
-#         InvokeModelCommand(
-#         model_id="anthropic.claude-3-opus-20231101-v1:0", 
-#         body=data
-#         )
-#     )
-#     result = response.result["text/markdown"]
-#     print(f"Result from LLM: {result}")
-#     # Return summary in Markdown format
-#     return result 
+    bedrock_runtime = boto3.client(service_name='bedrock-runtime', region_name='us-east-1')
+
+    prompt: str = f"\n\nHuman: Summarize the following data: <data> {data} </data> \n\nAssistant:"
+
+    # Print the first 100 characters of the prompt
+    print(f"\n\nInvoking Bedrock with prompt: {prompt[:100]} ... ... {prompt[-20:]}\nResponse from Bedrock\n")
+
+    body = json.dumps({
+        'prompt': prompt,
+        'max_tokens_to_sample': 4000
+    })
+                    
+    response = bedrock_runtime.invoke_model_with_response_stream(
+        modelId='anthropic.claude-v2', 
+        body=body
+    )
+        
+    stream = response.get('body')
+    if stream:
+        for event in stream:
+            chunk = event.get('chunk')
+            if chunk:
+                res = json.loads(chunk.get('bytes').decode())
+                print(res["completion"], end=" ")
 
 
 # main logic 
@@ -93,4 +127,4 @@ service = gmail_authenticate()
 messages_ids = list_messages(service, 'me')
 # print("Email Message IDs that have attachment:", messages_ids)
 for message_id in messages_ids:
-    get_attachments(service, 'me', message_id["id"])
+    process_attachments(service, 'me', message_id["id"])
