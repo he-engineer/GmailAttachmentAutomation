@@ -6,9 +6,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import pandas as pd
 import os
-# from aws_bedrock_runtime import BedrockRuntimeClient
-# from aws_bedrock_runtime.model import InvokeModelCommand
-
 
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
@@ -44,7 +41,7 @@ def process_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx
             
             print(f"Downloaded {file_name}")
             # Call the summarize function
-            stats, data = data_stats(file_path)
+            stats, data = get_stats_and_data(file_path)
             # convert data to str using json
 
             # Call AWS Bedrock Claude to summarize
@@ -65,7 +62,7 @@ Returns:
     stats (pandas DataFrame): The descriptive statistics of the DataFrame.
     data (str): The DataFrame converted to a JSON string.
 """
-def data_stats(file_name): 
+def get_stats_and_data(file_name): 
     if file_name.endswith('.csv'):
         df = pd.read_csv(file_name)
     elif file_name.endswith('.xlsx'):
@@ -119,8 +116,8 @@ def summarize_data(data):
             chunk = event.get('chunk')
             if chunk:
                 res = json.loads(chunk.get('bytes').decode())
-                print(res["completion"], end=" ")
-
+                print(res["completion"], end="")
+    print("\n\n\n")
 
 # main logic 
 service = gmail_authenticate()
