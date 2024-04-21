@@ -6,18 +6,36 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import pandas as pd
 import os
-# from aws_bedrock_runtime import BedrockRuntimeClient
-# from aws_bedrock_runtime.model import InvokeModelCommand
-
 
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
+
+def get_secret():
+  session = boto3.session.Session()
+  client = session.client(
+    service_name='secretsmanager',
+    region_name='us-east-1'
+  )
+  
+  secret = client.get_secret_value(
+    SecretId='gmail-credentials' 
+  )
+  
+  return secret['SecretString']
+
 def gmail_authenticate():
+    secret = get_secret()
+
+    with open('credentials.json', 'w') as f:
+        f.write(secret)
+        f.close()
+        print("credentials.json created")
     flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-    # Print the redirect URI 
+    os.remove('credentials.json')
+
     print("redirect URI:", flow.authorization_url()) 
-    creds = flow.run_local_server(port=0)
+    creds = flow.run_local_server(port=55095)
     service = build('gmail', 'v1', credentials=creds)
     return service
 
@@ -44,7 +62,7 @@ def process_attachments(service, user_id, message_id, file_types=['.csv', '.xlsx
             
             print(f"Downloaded {file_name}")
             # Call the summarize function
-            stats, data = data_stats(file_path)
+            stats, data = get_stats_and_data(file_path)
             # convert data to str using json
 
             # Call AWS Bedrock Claude to summarize
@@ -65,7 +83,7 @@ Returns:
     stats (pandas DataFrame): The descriptive statistics of the DataFrame.
     data (str): The DataFrame converted to a JSON string.
 """
-def data_stats(file_name): 
+def get_stats_and_data(file_name): 
     if file_name.endswith('.csv'):
         df = pd.read_csv(file_name)
     elif file_name.endswith('.xlsx'):
@@ -119,12 +137,15 @@ def summarize_data(data):
             chunk = event.get('chunk')
             if chunk:
                 res = json.loads(chunk.get('bytes').decode())
-                print(res["completion"], end=" ")
+                print(res["completion"], end="")
+    print("\n\n\n")
 
+def main():
+    service = gmail_authenticate()
+    messages_ids = list_messages(service, 'me')
+    # print("Email Message IDs that have attachment:", messages_ids)
+    for message_id in messages_ids:
+        process_attachments(service, 'me', message_id["id"])
 
-# main logic 
-service = gmail_authenticate()
-messages_ids = list_messages(service, 'me')
-# print("Email Message IDs that have attachment:", messages_ids)
-for message_id in messages_ids:
-    process_attachments(service, 'me', message_id["id"])
+if __name__ == '__main__':
+  main()
