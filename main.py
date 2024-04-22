@@ -26,15 +26,13 @@ def get_secret():
 
 def gmail_authenticate():
     secret = get_secret()
-
     with open('credentials.json', 'w') as f:
         f.write(secret)
         f.close()
-        print("credentials.json created")
     flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
     os.remove('credentials.json')
 
-    print("redirect URI:", flow.authorization_url()) 
+    # print("redirect URI:", flow.authorization_url()) 
     creds = flow.run_local_server(port=55095)
     service = build('gmail', 'v1', credentials=creds)
     return service
